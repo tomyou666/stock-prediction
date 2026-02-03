@@ -1,138 +1,64 @@
-# Jupyter Notebook セットアップテンプレート
+# 株価指数予測：PSO-LSTM（5分足・騰落率）
 
-このプロジェクトは、Jupyter Notebookでデータ分析を素早く始めるためのテンプレートです。Pythonの主要なデータ分析ライブラリが事前に設定されており、日本語フォントの設定も含まれています。
+本リポジトリは、論文「Enhancing stock index prediction: A hybrid LSTM-PSO model for improved forecasting accuracy」を参考に、**PSOでLSTMのハイパーパラメータを最適化**して、**5分足の騰落率**を予測するJupyter実装です。
+学習は **5分 / 30分 / 60分** の3粒度で行い、yfinance のデータを使用します。
 
-## 含まれるライブラリ
+## ノートブック
 
-- **pandas**: データ操作・分析
-- **numpy**: 数値計算
-- **matplotlib**: グラフ作成
-- **seaborn**: 統計的データ可視化
-- **japanize-matplotlib**: 日本語フォント対応
-- **openpyxl**: Excelファイル読み書き
-- **jupyter**: Jupyter Notebook環境
-- **ruff**: コードフォーマッター
+- `pso_lstm_5m.ipynb`
+  5分足データの取得、特徴量生成、Wavelet DWT、PSO最適化、学習・評価までを実行します。
 
-## セットアップ手順
+## 予測対象
 
-### 1. 前提条件
+- **出力（正解値）**: 次時点の騰落率（`pct_change`）
+- **入力**:
+  - OHLCV（5分足）
+  - テクニカル指標
+  - マクロ指標（USD/JPY, 金利）
 
-- Python 3.11以上
+## 主要仕様
+
+- データ取得: `yfinance`
+- Wavelet DWT: Haar / 3レベル
+- ルックバック: 5分 / 30分 / 60分
+- 学習評価: RMSE / MAE / MAPE / R2
+- PSO:
+  - 粒子数 `N=20`
+  - 反復 `K=50`
+  - `w=0.8, c1=1.5, c2=1.5`
+
+## セットアップ
+
+### 前提
+
+- Python 3.11+
 - [uv](https://docs.astral.sh/uv/) パッケージマネージャー
 
-### 2. プロジェクトのクローン
-
-```bash
-git clone <このリポジトリのURL>
-cd <プロジェクト名>
-```
-
-### 3. 依存関係のインストール
+### 依存関係インストール
 
 ```bash
 uv sync
 ```
 
-#### ※依存関係を佐伸する場合
-```bash
-uv add japanize-matplotlib jupyter matplotlib numpy openpyxl pandas ruff seaborn
-uv lock --upgrade
-```
-
-### 4. Jupyter Notebookの起動
-
-```bash
-uv run jupyter notebook
-```
-
-または
+### Jupyter起動
 
 ```bash
 uv run jupyter lab
 ```
 
-### 5. サンプルノートブックの実行
+## 注意事項
 
-`sample.ipynb` を開いて、セットアップが正しく動作することを確認してください。このサンプルでは：
-
-- ライブラリのインポート
-- 日本語フォントの設定
-- 幾何ブラウン運動のシミュレーション例
-
-が含まれています。
-
-## 使用方法
-
-### 新しいノートブックの作成
-
-1. Jupyter Notebookを起動
-2. 「New」→「Python 3」を選択
-3. 以下のコードを最初のセルに貼り付けて実行：
-
-```python
-# ライブラリのインポート
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import warnings
-%matplotlib inline
-warnings.filterwarnings('ignore')
-
-# 日本語フォントの設定
-try:
-    import japanize_matplotlib
-    print("japanize_matplotlib を使用して日本語フォントを設定しました")
-except ImportError:
-    # japanize_matplotlibが利用できない場合の代替設定
-    plt.rcParams['font.family'] = ['DejaVu Sans', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Takao', 'IPAexGothic', 'IPAPGothic', 'VL PGothic', 'Noto Sans CJK JP']
-    print("代替フォント設定を使用しました")
-sns.set(font="IPAexGothic")
-
-print("ライブラリのインポート完了")
-```
-
-### 追加ライブラリのインストール
-
-新しいライブラリが必要な場合：
-
-```bash
-uv add <ライブラリ名>
-```
-
-例：
-```bash
-uv add scikit-learn
-uv add plotly
-```
-
-## トラブルシューティング
-
-### 日本語フォントが表示されない場合
-
-1. システムに日本語フォントがインストールされていることを確認
-2. `japanize_matplotlib` が正しくインストールされていることを確認
-3. 代替フォント設定が適用されていることを確認
-
-### Jupyter Notebookが起動しない場合
-
-1. `uv sync` で依存関係が正しくインストールされていることを確認
-2. 仮想環境が正しくアクティベートされていることを確認
+- yfinanceの**5分足は直近数十日分のみ**取得可能です。データ不足時は期間を短く調整してください。
+- マクロ指標（USD/JPY, 金利）は日次データのため、5分足へは前方補完で揃えます。
+- GPUがない環境でも動きますが、GPUがある前提のコード構成です。
 
 ## プロジェクト構造
 
 ```
 .
-├── README.md           # このファイル
-├── pyproject.toml      # プロジェクト設定と依存関係
-├── uv.lock            # 依存関係のロックファイル
-└── sample.ipynb       # サンプルノートブック
+├── README.md
+├── pyproject.toml
+├── uv.lock
+├── sample.ipynb
+└── pso_lstm_5m.ipynb
 ```
-
-## ライセンス
-
-このプロジェクトはMITライセンスの下で公開されています。
-
-## 貢献
-
-バグ報告や機能要望は、GitHubのIssuesページでお知らせください。
