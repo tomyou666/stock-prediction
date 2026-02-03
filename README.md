@@ -29,18 +29,40 @@
 
 ## セットアップ
 
-### 前提
+### Dev Container で起動
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) パッケージマネージャー
+VS Code / Cursor でこのリポジトリを開き、**Dev Containers** 拡張機能を使ってコンテナで起動できます。
 
-### 依存関係インストール
+1. リポジトリをクローンして開く
+2. 「Reopen in Container」でコンテナ内で開く（またはコマンドパレットで `Dev Containers: Reopen in Container`）
+3. 依存関係インストール
 
 ```bash
 uv sync
 ```
 
-### Jupyter起動
+4. Jupyter起動
+
+```bash
+uv run jupyter lab
+```
+
+Python や uv はコンテナ内に用意されているため、ローカルに Python を入れなくても開発できます。
+
+### ローカルで起動する場合
+
+#### 前提
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) パッケージマネージャー
+
+#### 依存関係インストール
+
+```bash
+uv sync
+```
+
+#### Jupyter起動
 
 ```bash
 uv run jupyter lab

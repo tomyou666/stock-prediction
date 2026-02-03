@@ -9,7 +9,7 @@ RUN apt-get update && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # マルチビルド-実際に使用するイメージ
-FROM debian:bullseye-slim
+FROM tensorflow/tensorflow:2.20.0-gpu
 RUN apt-get update && apt-get install -y \
     git
 
