@@ -1,6 +1,6 @@
-# 株価指数予測：PSO-LSTM（5分足・騰落率）
+# 株価指数予測：PSO-LSTM（5分足・終値）
 
-本リポジトリは、論文「Enhancing stock index prediction: A hybrid LSTM-PSO model for improved forecasting accuracy」を参考に、**PSOでLSTMのハイパーパラメータを最適化**して、**5分足の騰落率**を予測するJupyter実装です。
+本リポジトリは、論文「Enhancing stock index prediction: A hybrid LSTM-PSO model for improved forecasting accuracy」を参考に、**PSOでLSTMのハイパーパラメータを最適化**して、**5分足の終値**を予測するJupyter実装です。
 学習は **5分 / 30分 / 60分** の3粒度で行い、yfinance のデータを使用します。
 
 ## ノートブック
@@ -10,7 +10,7 @@
 
 ## 予測対象
 
-- **出力（正解値）**: 次時点の騰落率（`pct_change`）
+- **出力（正解値）**: 次時点の終値（`close`）
 - **入力**:
   - OHLCV（5分足）
   - テクニカル指標
