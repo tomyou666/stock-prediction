@@ -42,14 +42,21 @@ def _normalize_index(df: pd.DataFrame) -> pd.DataFrame:
 
 def download_price_data(ticker: str, interval: str, period: str) -> pd.DataFrame:
     """yfinanceで指定銘柄・足・期間の価格データ（OHLCV）をダウンロードし、正規化して返す。"""
-    print(ticker, interval, period)
     df = yf.download(
         ticker, interval=interval, period=period, auto_adjust=False, progress=False
     )
     if df.empty:
         raise ValueError(f"データ取得に失敗: {ticker}")
     df = _normalize_index(df)
-    df = df.rename(columns=str.lower)
+    # yfinance が MultiIndex 列（(項目, ティッカー) など）を返す場合、
+    # この段階で単一インデックスにしておく。
+    # そうすることで、後段（例: remove_high_corr_features 呼び出し前）の DataFrame が
+    # 不要にマルチインデックス列を持たないようにする。
+    if isinstance(df.columns, pd.MultiIndex):
+        first_level = df.columns.get_level_values(0)
+        df.columns = [str(c).lower() for c in first_level]
+    else:
+        df = df.rename(columns=str.lower)
     return df
 
 
@@ -65,7 +72,13 @@ def download_macro_daily(ticker: str, period_years: int = 5) -> pd.Series:
     if df.empty:
         raise ValueError(f"マクロデータ取得に失敗: {ticker}")
     df = _normalize_index(df)
-    series = df["Close"].copy()
+    # こちらも MultiIndex 列の可能性があるため、価格データと同様にフラット化する。
+    if isinstance(df.columns, pd.MultiIndex):
+        first_level = df.columns.get_level_values(0)
+        df.columns = [str(c).lower() for c in first_level]
+    else:
+        df = df.rename(columns=str.lower)
+    series = df["close"].copy()
     series.name = ticker
     return series
 
@@ -192,11 +205,16 @@ def _flatten_column_index(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def remove_high_corr_features(
-    df: pd.DataFrame, target_col: str, threshold: float = 0.95
+    df: pd.DataFrame,
+    target_col: str,
+    threshold: float = 0.95,
+    protect_cols: list[str] | None = None,
 ) -> tuple[pd.DataFrame, list]:
     """目的変数との絶対相関がthresholdを超える特徴量を削除し、削除した列名のリストも返す。
+    protect_cols に列名を指定した場合は削除対象から除外する。
     MultiIndex 列の場合は先に平坦化し、列名は常に文字列のリストで返す。"""
     df = _flatten_column_index(df)
+    protect = set(protect_cols or [])
     corr = df.corr(numeric_only=True)
     if target_col not in corr.columns:
         raise ValueError(
@@ -211,7 +229,7 @@ def remove_high_corr_features(
     not_self = np.array([n != target_col for n in names], dtype=bool)
     mask = is_high & not_self
     drop_cols = [names[i] for i in range(len(names)) if mask[i]]
-    drop_cols = [col for col in drop_cols if col != target_col]
+    drop_cols = [col for col in drop_cols if col != target_col and col not in protect]
     return df.drop(columns=drop_cols), drop_cols
 
 
@@ -223,9 +241,10 @@ def build_target_close(df: pd.DataFrame) -> pd.Series:
     return next_close
 
 
-def build_target_return(df: pd.DataFrame) -> pd.Series:
-    """騰落率（次バー終値の変化率）を予測対象の目的変数として返す。ret[t] = (close[t+1] - close[t]) / close[t]。"""
-    close = pd.Series(np.asarray(df["close"]).ravel(), index=df.index)
+def build_target_return(df: pd.DataFrame, close_col: str = "close") -> pd.Series:
+    """騰落率（次バー終値の変化率）を予測対象の目的変数として返す。ret[t] = (close[t+1] - close[t]) / close[t]。
+    close_col: 騰落率計算に使う終値列（例: "close" または "close_raw"）。"""
+    close = pd.Series(np.asarray(df[close_col]).ravel(), index=df.index)
     next_close = close.shift(-1)
     ret = (next_close - close) / close
     ret.name = "target_return"
