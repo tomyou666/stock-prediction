@@ -194,17 +194,39 @@ def build_target_close(df: pd.DataFrame) -> pd.Series:
     return next_close
 
 
-def create_sequences(features: np.ndarray, target: np.ndarray, lookback: int) -> tuple[np.ndarray, np.ndarray]:
-    """LSTM用に、過去lookbackステップの特徴量を入力・その時点の目的変数を出力とするシーケンスの組 (X, y) を作成する。"""
+def build_target_return(df: pd.DataFrame) -> pd.Series:
+    """騰落率（次バー終値の変化率）を予測対象の目的変数として返す。ret[t] = (close[t+1] - close[t]) / close[t]。"""
+    close = pd.Series(np.asarray(df["close"]).ravel(), index=df.index)
+    next_close = close.shift(-1)
+    ret = (next_close - close) / close
+    ret.name = "target_return"
+    return ret
+
+
+def create_sequences(
+    features: np.ndarray,
+    target: np.ndarray,
+    lookback: int,
+    close_col_idx: int | None = None,
+) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """LSTM用に、過去lookbackステップの特徴量を入力・その時点の目的変数を出力とするシーケンスの組 (X, y) を作成する。
+    close_col_idx を指定した場合、各サンプルの入力の最終ステップの終値 last_close を返す（騰落率→終値の復元用）。"""
     xs, ys = [], []
     for i in range(lookback, len(features)):
         xs.append(features[i - lookback : i])
         ys.append(target[i])
-    return np.array(xs), np.array(ys)
+    X = np.array(xs)
+    y = np.array(ys)
+    if close_col_idx is not None:
+        # 各サンプルの入力の最後のタイムステップの終値（インデックス i-1 の close）
+        last_close = features[np.arange(lookback - 1, len(features) - 1), close_col_idx]
+        return X, y, last_close
+    return X, y
 
 
-def train_val_test_split(X, y, train_ratio=0.8, val_ratio=0.2):
-    """時系列順を保ったまま、先頭から train_ratio を訓練、その中の val_ratio を検証、残りをテストに分割する。"""
+def train_val_test_split(X, y, train_ratio=0.8, val_ratio=0.2, last_close=None):
+    """時系列順を保ったまま、先頭から train_ratio を訓練、その中の val_ratio を検証、残りをテストに分割する。
+    last_close を渡した場合、その分割も返す（(last_close_train, last_close_val, last_close_test)）。"""
     n = len(X)
     train_end = int(n * train_ratio)
     val_end = int(train_end * (1 - val_ratio))
@@ -214,6 +236,21 @@ def train_val_test_split(X, y, train_ratio=0.8, val_ratio=0.2):
     y_val = y[val_end:train_end]
     X_test = X[train_end:]
     y_test = y[train_end:]
+    if last_close is not None:
+        last_close_train = last_close[:val_end]
+        last_close_val = last_close[val_end:train_end]
+        last_close_test = last_close[train_end:]
+        return (
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            X_test,
+            y_test,
+            last_close_train,
+            last_close_val,
+            last_close_test,
+        )
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
