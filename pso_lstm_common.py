@@ -150,9 +150,30 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _flatten_column_index(df: pd.DataFrame) -> pd.DataFrame:
+    """MultiIndex 列を 1 段階の文字列列名に変換する（呼び出し側が文字列で列を指定できるようにする）。"""
+    if df.columns.nlevels <= 1:
+        return df.copy()
+    new_cols = []
+    for c in df.columns:
+        if isinstance(c, tuple):
+            part = [str(x).strip() for x in c if x]
+            new_cols.append("_".join(part) if part else str(c[0]))
+        else:
+            new_cols.append(str(c))
+    out = df.copy()
+    out.columns = new_cols
+    return out
+
+
 def remove_high_corr_features(df: pd.DataFrame, target_col: str, threshold: float = 0.95) -> tuple[pd.DataFrame, list]:
-    """目的変数との絶対相関がthresholdを超える特徴量を削除し、削除した列名のリストも返す。"""
-    corr_series = df.corr(numeric_only=True)[target_col].abs()
+    """目的変数との絶対相関がthresholdを超える特徴量を削除し、削除した列名のリストも返す。
+    MultiIndex 列の場合は先に平坦化し、列名は常に文字列のリストで返す。"""
+    df = _flatten_column_index(df)
+    corr = df.corr(numeric_only=True)
+    if target_col not in corr.columns:
+        raise ValueError(f"target_col '{target_col}' not found in the DataFrame correlation matrix.")
+    corr_series = corr[target_col].abs()
     if isinstance(corr_series, pd.DataFrame):
         corr_series = corr_series.squeeze()
     vals = np.asarray(corr_series).ravel()
@@ -161,6 +182,7 @@ def remove_high_corr_features(df: pd.DataFrame, target_col: str, threshold: floa
     not_self = np.array([n != target_col for n in names], dtype=bool)
     mask = is_high & not_self
     drop_cols = [names[i] for i in range(len(names)) if mask[i]]
+    drop_cols = [col for col in drop_cols if col != target_col]
     return df.drop(columns=drop_cols), drop_cols
 
 
