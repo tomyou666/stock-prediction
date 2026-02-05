@@ -20,16 +20,15 @@ L2_LAMBDA = 1e-4
 
 # PSO・学習のデフォルト（pso_optimize の引数で上書き可能）
 BATCH_SIZE = 32
-NEURON_BOUNDS = (50, 300) # ニューロン数 論文は(0, 300)
-EPOCH_BOUNDS = (50, 300) # 反復回数（エポック）: 論文は(50, 300)
-LAYER_BOUNDS = (1, 3) # 評価する隠れ層: 論文は (1, 3)
-PSO_W = 0.8 # 慣性重み: 論文は 0.8
-PSO_C1 = 1.5 # 加速定数: 論文は 1.5
-PSO_C2 = 1.5 # 加速定数: 論文は 1.5
+NEURON_BOUNDS = (50, 300)  # ニューロン数 論文は(0, 300)
+EPOCH_BOUNDS = (50, 300)  # 反復回数（エポック）: 論文は(50, 300)
+LAYER_BOUNDS = (1, 3)  # 評価する隠れ層: 論文は (1, 3)
+PSO_W = 0.8  # 慣性重み: 論文は 0.8
+PSO_C1 = 1.5  # 加速定数: 論文は 1.5
+PSO_C2 = 1.5  # 加速定数: 論文は 1.5
 # PSO_PARTICLES × PSO_ITERS の計算が行われるため小さいほうがいい
-PSO_PARTICLES = 20 # グループサイズ: 論文は 20
-PSO_ITERS = 10 # PSO の最大反復回数: 論文は 50
-REPEATS = 1  # PSO実施回数: 論文は 10 # TODO: 実装
+PSO_PARTICLES = 20  # グループサイズ: 論文は 20
+PSO_ITERS = 1  # PSO の最大反復回数: 論文は 50
 
 
 def _normalize_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -124,15 +123,15 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     macd = ta.trend.MACD(close=out["close"].squeeze())
     out["macd"] = macd.macd_diff().values.reshape(-1, 1)
-    out["cci"] = ta.trend.cci(out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()).values.reshape(-1, 1)
+    out["cci"] = ta.trend.cci(out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()).values.reshape(
+        -1, 1
+    )
     out["atr"] = ta.volatility.average_true_range(
         out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()
     ).values.reshape(-1, 1)
     boll = ta.volatility.BollingerBands(close=out["close"].squeeze())
     out["boll"] = boll.bollinger_mavg().values.reshape(-1, 1)
-    out["ema20"] = (
-        ta.trend.EMAIndicator(out["close"].squeeze(), window=20).ema_indicator().values.reshape(-1, 1)
-    )
+    out["ema20"] = ta.trend.EMAIndicator(out["close"].squeeze(), window=20).ema_indicator().values.reshape(-1, 1)
     out["ma5"] = out["close"].rolling(5).mean()
     out["ma10"] = out["close"].rolling(10).mean()
     out["mtm6"] = out["close"] - out["close"].shift(6)
@@ -151,9 +150,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def remove_high_corr_features(
-    df: pd.DataFrame, target_col: str, threshold: float = 0.95
-) -> tuple[pd.DataFrame, list]:
+def remove_high_corr_features(df: pd.DataFrame, target_col: str, threshold: float = 0.95) -> tuple[pd.DataFrame, list]:
     """目的変数との絶対相関がthresholdを超える特徴量を削除し、削除した列名のリストも返す。"""
     corr_series = df.corr(numeric_only=True)[target_col].abs()
     if isinstance(corr_series, pd.DataFrame):
@@ -175,9 +172,7 @@ def build_target_close(df: pd.DataFrame) -> pd.Series:
     return next_close
 
 
-def create_sequences(
-    features: np.ndarray, target: np.ndarray, lookback: int
-) -> tuple[np.ndarray, np.ndarray]:
+def create_sequences(features: np.ndarray, target: np.ndarray, lookback: int) -> tuple[np.ndarray, np.ndarray]:
     """LSTM用に、過去lookbackステップの特徴量を入力・その時点の目的変数を出力とするシーケンスの組 (X, y) を作成する。"""
     xs, ys = [], []
     for i in range(lookback, len(features)):
@@ -214,9 +209,7 @@ def scale_train_val_test(X_train, X_val, X_test, y_train, y_val, y_test):
     return X_train_s, X_val_s, X_test_s, y_train_s, y_val_s, y_test_s, x_scaler, y_scaler
 
 
-def build_lstm_model(
-    input_shape, num_layers: int, num_units: int, l2_lambda: float | None = None
-):
+def build_lstm_model(input_shape, num_layers: int, num_units: int, l2_lambda: float | None = None):
     """指定した層数・ユニット数でスタックLSTMモデルを構築する。各層にDropout(0.2)、L2正則化、最終層はDense(1)、損失はMSE。"""
     if l2_lambda is None:
         l2_lambda = L2_LAMBDA
@@ -283,9 +276,7 @@ def pso_optimize(
             n_layers = int(np.clip(round(particle[2]), *layer_bounds))
             tf.keras.backend.clear_session()
             model = build_lstm_model(input_shape, n_layers, units)
-            es = keras.callbacks.EarlyStopping(
-                monitor="val_loss", patience=5, restore_best_weights=True
-            )
+            es = keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
             csv_log = keras.callbacks.CSVLogger(csv_log_path)
             model.fit(
                 X_train,
