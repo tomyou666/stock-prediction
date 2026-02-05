@@ -19,7 +19,7 @@ from tensorflow.keras import layers
 L2_LAMBDA = 1e-4
 
 # PSO・学習のデフォルト（pso_optimize の引数で上書き可能）
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 NEURON_BOUNDS = (50, 300)  # ニューロン数 論文は(0, 300)
 EPOCH_BOUNDS = (50, 300)  # 反復回数（エポック）: 論文は(50, 300)
 LAYER_BOUNDS = (1, 3)  # 評価する隠れ層: 論文は (1, 3)
@@ -28,7 +28,7 @@ PSO_C1 = 1.5  # 加速定数: 論文は 1.5
 PSO_C2 = 1.5  # 加速定数: 論文は 1.5
 # PSO_PARTICLES × PSO_ITERS の計算が行われるため小さいほうがいい
 PSO_PARTICLES = 20  # グループサイズ: 論文は 20
-PSO_ITERS = 1  # PSO の最大反復回数: 論文は 50
+PSO_ITERS = 5  # PSO の最大反復回数: 論文は 50
 
 
 def _normalize_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -42,7 +42,10 @@ def _normalize_index(df: pd.DataFrame) -> pd.DataFrame:
 
 def download_price_data(ticker: str, interval: str, period: str) -> pd.DataFrame:
     """yfinanceで指定銘柄・足・期間の価格データ（OHLCV）をダウンロードし、正規化して返す。"""
-    df = yf.download(ticker, interval=interval, period=period, auto_adjust=False, progress=False)
+    print(ticker, interval, period)
+    df = yf.download(
+        ticker, interval=interval, period=period, auto_adjust=False, progress=False
+    )
     if df.empty:
         raise ValueError(f"データ取得に失敗: {ticker}")
     df = _normalize_index(df)
@@ -52,7 +55,13 @@ def download_price_data(ticker: str, interval: str, period: str) -> pd.DataFrame
 
 def download_macro_daily(ticker: str, period_years: int = 5) -> pd.Series:
     """日足のマクロデータ（為替・金利など）を指定年数分ダウンロードし、終値のSeriesで返す。"""
-    df = yf.download(ticker, interval="1d", period=f"{period_years}y", auto_adjust=False, progress=False)
+    df = yf.download(
+        ticker,
+        interval="1d",
+        period=f"{period_years}y",
+        auto_adjust=False,
+        progress=False,
+    )
     if df.empty:
         raise ValueError(f"マクロデータ取得に失敗: {ticker}")
     df = _normalize_index(df)
@@ -76,7 +85,9 @@ def resample_ohlcv(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
     return out.dropna()
 
 
-def merge_macro_features(price_df: pd.DataFrame, fx: pd.Series, rate: pd.Series) -> pd.DataFrame:
+def merge_macro_features(
+    price_df: pd.DataFrame, fx: pd.Series, rate: pd.Series
+) -> pd.DataFrame:
     """価格DataFrameに為替（fx）と金利（rate）の列を前方補完で結合する。"""
     df = price_df.copy()
     fx = fx.reindex(df.index, method="ffill")
@@ -94,7 +105,9 @@ def resample_series(series: pd.Series, minutes: int) -> pd.Series:
     return series.resample(rule).last().dropna()
 
 
-def wavelet_denoise(series: pd.Series, wavelet: str = "haar", level: int = 3) -> pd.Series:
+def wavelet_denoise(
+    series: pd.Series, wavelet: str = "haar", level: int = 3
+) -> pd.Series:
     """ウェーブレット変換で時系列のノイズを除去する。"""
     if isinstance(series, pd.DataFrame):
         series = series.squeeze()
@@ -103,13 +116,17 @@ def wavelet_denoise(series: pd.Series, wavelet: str = "haar", level: int = 3) ->
     arr = np.asarray(series, dtype=np.float64).ravel().copy()
     coeffs = pywt.wavedec(arr, wavelet, level=level)
     detail_coeffs = coeffs[1:]
-    sigma = np.median(np.abs(detail_coeffs[-1])) / 0.6745 if len(detail_coeffs) > 0 else 0
+    sigma = (
+        np.median(np.abs(detail_coeffs[-1])) / 0.6745 if len(detail_coeffs) > 0 else 0
+    )
     uthresh = sigma * np.sqrt(2 * np.log(len(arr))) if sigma > 0 else 0
     coeffs[1:] = [pywt.threshold(c, value=uthresh, mode="soft") for c in coeffs[1:]]
     reconstructed = pywt.waverec(coeffs, wavelet)
     reconstructed = reconstructed[: len(arr)]
     name = getattr(series, "name", None)
-    index = series.index if hasattr(series, "index") else pd.RangeIndex(len(reconstructed))
+    index = (
+        series.index if hasattr(series, "index") else pd.RangeIndex(len(reconstructed))
+    )
     return pd.Series(reconstructed, index=index, name=name)
 
 
@@ -123,20 +140,28 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     macd = ta.trend.MACD(close=out["close"].squeeze())
     out["macd"] = macd.macd_diff().values.reshape(-1, 1)
-    out["cci"] = ta.trend.cci(out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()).values.reshape(
-        -1, 1
-    )
+    out["cci"] = ta.trend.cci(
+        out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()
+    ).values.reshape(-1, 1)
     out["atr"] = ta.volatility.average_true_range(
         out["high"].squeeze(), out["low"].squeeze(), out["close"].squeeze()
     ).values.reshape(-1, 1)
     boll = ta.volatility.BollingerBands(close=out["close"].squeeze())
     out["boll"] = boll.bollinger_mavg().values.reshape(-1, 1)
-    out["ema20"] = ta.trend.EMAIndicator(out["close"].squeeze(), window=20).ema_indicator().values.reshape(-1, 1)
+    out["ema20"] = (
+        ta.trend.EMAIndicator(out["close"].squeeze(), window=20)
+        .ema_indicator()
+        .values.reshape(-1, 1)
+    )
     out["ma5"] = out["close"].rolling(5).mean()
     out["ma10"] = out["close"].rolling(10).mean()
     out["mtm6"] = out["close"] - out["close"].shift(6)
     out["mtm12"] = out["close"] - out["close"].shift(12)
-    out["roc"] = ta.momentum.ROCIndicator(out["close"].squeeze(), window=10).roc().values.reshape(-1, 1)
+    out["roc"] = (
+        ta.momentum.ROCIndicator(out["close"].squeeze(), window=10)
+        .roc()
+        .values.reshape(-1, 1)
+    )
     hl = (out["high"] + out["low"]) / 2
     diff = out["close"] - hl
     hl_range = out["high"] - out["low"]
@@ -166,13 +191,17 @@ def _flatten_column_index(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def remove_high_corr_features(df: pd.DataFrame, target_col: str, threshold: float = 0.95) -> tuple[pd.DataFrame, list]:
+def remove_high_corr_features(
+    df: pd.DataFrame, target_col: str, threshold: float = 0.95
+) -> tuple[pd.DataFrame, list]:
     """目的変数との絶対相関がthresholdを超える特徴量を削除し、削除した列名のリストも返す。
     MultiIndex 列の場合は先に平坦化し、列名は常に文字列のリストで返す。"""
     df = _flatten_column_index(df)
     corr = df.corr(numeric_only=True)
     if target_col not in corr.columns:
-        raise ValueError(f"target_col '{target_col}' not found in the DataFrame correlation matrix.")
+        raise ValueError(
+            f"target_col '{target_col}' not found in the DataFrame correlation matrix."
+        )
     corr_series = corr[target_col].abs()
     if isinstance(corr_series, pd.DataFrame):
         corr_series = corr_series.squeeze()
@@ -258,17 +287,30 @@ def scale_train_val_test(X_train, X_val, X_test, y_train, y_val, y_test):
     """訓練データでMinMaxScaler(-1,1)をfitし、訓練・検証・テストの特徴量と目的変数をスケーリングする。スケーラーも返す。"""
     n_features = X_train.shape[2]
     x_scaler = MinMaxScaler(feature_range=(-1, 1))
-    X_train_s = x_scaler.fit_transform(X_train.reshape(-1, n_features)).reshape(X_train.shape)
+    X_train_s = x_scaler.fit_transform(X_train.reshape(-1, n_features)).reshape(
+        X_train.shape
+    )
     X_val_s = x_scaler.transform(X_val.reshape(-1, n_features)).reshape(X_val.shape)
     X_test_s = x_scaler.transform(X_test.reshape(-1, n_features)).reshape(X_test.shape)
     y_scaler = MinMaxScaler(feature_range=(-1, 1))
     y_train_s = y_scaler.fit_transform(y_train.reshape(-1, 1))
     y_val_s = y_scaler.transform(y_val.reshape(-1, 1))
     y_test_s = y_scaler.transform(y_test.reshape(-1, 1))
-    return X_train_s, X_val_s, X_test_s, y_train_s, y_val_s, y_test_s, x_scaler, y_scaler
+    return (
+        X_train_s,
+        X_val_s,
+        X_test_s,
+        y_train_s,
+        y_val_s,
+        y_test_s,
+        x_scaler,
+        y_scaler,
+    )
 
 
-def build_lstm_model(input_shape, num_layers: int, num_units: int, l2_lambda: float | None = None):
+def build_lstm_model(
+    input_shape, num_layers: int, num_units: int, l2_lambda: float | None = None
+):
     """指定した層数・ユニット数でスタックLSTMモデルを構築する。各層にDropout(0.2)、L2正則化、最終層はDense(1)、損失はMSE。"""
     if l2_lambda is None:
         l2_lambda = L2_LAMBDA
@@ -291,7 +333,9 @@ def build_lstm_model(input_shape, num_layers: int, num_units: int, l2_lambda: fl
                 )
             )
         else:
-            model.add(layers.LSTM(num_units, return_sequences=return_sequences, **lstm_kw))
+            model.add(
+                layers.LSTM(num_units, return_sequences=return_sequences, **lstm_kw)
+            )
         model.add(layers.Dropout(0.2))
     model.add(layers.Dense(1, kernel_regularizer=l2_reg, bias_regularizer=l2_reg))
     model.compile(optimizer="adam", loss="mse")
@@ -342,7 +386,9 @@ def pso_optimize(
                     model = build_lstm_model(input_shape, n_layers, units)
             else:
                 model = build_lstm_model(input_shape, n_layers, units)
-            es = keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
+            es = keras.callbacks.EarlyStopping(
+                monitor="val_loss", patience=5, restore_best_weights=True
+            )
             csv_log = keras.callbacks.CSVLogger(csv_log_path)
             model.fit(
                 X_train,
