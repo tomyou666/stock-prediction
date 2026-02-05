@@ -256,8 +256,11 @@ def pso_optimize(
     pso_c2=None,
     pso_particles=None,
     pso_iters=None,
+    strategy=None,
 ):
-    """PSOでLSTMのハイパーパラメータを探索し、検証RMSEが最小の解とそのコストを返す。"""
+    """PSOでLSTMのハイパーパラメータを探索し、検証RMSEが最小の解とそのコストを返す。
+    strategy: tf.distribute.Strategy (複数GPU時は MirroredStrategy)。None の場合は単一デバイス。
+    """
     batch_size = batch_size if batch_size is not None else BATCH_SIZE
     neuron_bounds = neuron_bounds if neuron_bounds is not None else NEURON_BOUNDS
     epoch_bounds = epoch_bounds if epoch_bounds is not None else EPOCH_BOUNDS
@@ -275,7 +278,11 @@ def pso_optimize(
             epochs = int(np.clip(round(particle[1]), *epoch_bounds))
             n_layers = int(np.clip(round(particle[2]), *layer_bounds))
             tf.keras.backend.clear_session()
-            model = build_lstm_model(input_shape, n_layers, units)
+            if strategy is not None:
+                with strategy.scope():
+                    model = build_lstm_model(input_shape, n_layers, units)
+            else:
+                model = build_lstm_model(input_shape, n_layers, units)
             es = keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
             csv_log = keras.callbacks.CSVLogger(csv_log_path)
             model.fit(
