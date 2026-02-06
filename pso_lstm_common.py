@@ -328,11 +328,17 @@ def scale_train_val_test(X_train, X_val, X_test, y_train, y_val, y_test):
 
 
 def build_lstm_model(
-    input_shape, num_layers: int, num_units: int, l2_lambda: float | None = None
+    input_shape,
+    num_layers: int,
+    num_units: int,
+    l2_lambda: float | None = None,
+    dense_units: int | None = None,
 ):
-    """指定した層数・ユニット数でスタックLSTMモデルを構築する。各層にDropout(0.2)、L2正則化、最終層はDense(1)、損失はMSE。"""
+    """指定した層数・ユニット数でスタックLSTMモデルを構築する。各層にDropout(0.2)、L2正則化。LSTMと出力層の間にReLU中間層＋Dropoutを挿入。最終層はDense(1)、損失はMSE。"""
     if l2_lambda is None:
         l2_lambda = L2_LAMBDA
+    if dense_units is None:
+        dense_units = num_units
     l2_reg = keras.regularizers.l2(l2_lambda)
     model = keras.Sequential()
     for i in range(num_layers):
@@ -356,6 +362,16 @@ def build_lstm_model(
                 layers.LSTM(num_units, return_sequences=return_sequences, **lstm_kw)
             )
         model.add(layers.Dropout(0.2))
+    # 中間層
+    model.add(
+        layers.Dense(
+            dense_units,
+            activation="relu",
+            kernel_regularizer=l2_reg,
+            bias_regularizer=l2_reg,
+        )
+    )
+    model.add(layers.Dropout(0.2))
     model.add(layers.Dense(1, kernel_regularizer=l2_reg, bias_regularizer=l2_reg))
     model.compile(optimizer="adam", loss="mse")
     return model
